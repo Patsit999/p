@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0a0d2e">
+<title>Wishes · Loy Krathong</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=Mali&family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="sky"></div><div class="moon"></div><div class="river"></div>
+<main class="page">
+  <section id="login" class="box glass">
+    <h2>Her wishes, for your eyes only</h2>
+    <p class="sub" style="margin-top:.6em">Sign in to read what she sent down the river.</p>
+    <input id="email" type="email" placeholder="Email" autocomplete="username">
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:10px">
+    <p id="err" role="alert"></p>
+    <button class="btn" id="in">Open the river</button>
+  </section>
+  <section id="wishes" hidden>
+    <h1 id="count">Wishes</h1>
+    <button class="btn ghost" id="out">Sign out</button>
+    <div class="tl" id="tl"></div>
+  </section>
+</main>
+<script type="module">
+import { app, db, krathongSVG, sky } from "./shared.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const $ = s => document.querySelector(s), auth = getAuth(app);
+let stop;
+sky();
+
+function render(snap) {
+  $("#count").textContent = snap.size ? `${snap.size} wish${snap.size > 1 ? "es" : ""} for you 💌` : "The river is quiet, no wishes yet 🌙";
+  const tl = $("#tl"); tl.replaceChildren();
+  snap.forEach(d => {
+    const w = d.data(), el = document.createElement("article");
+    el.className = "item glass";
+    el.innerHTML = `<div class="k">${krathongSVG(w.flower, w.candles)}</div><div><p class="when"></p><h2></h2><p class="wish"></p></div>`;
+    el.querySelector(".when").textContent = w.createdAt ? w.createdAt.toDate().toLocaleString([], { dateStyle: "long", timeStyle: "short" }) : "just now";
+    el.querySelector("h2").textContent = w.name;
+    el.querySelector(".wish").textContent = w.wish;
+    tl.append(el);
+  });
+}
+
+onAuthStateChanged(auth, u => {
+  $("#login").hidden = !!u; $("#wishes").hidden = !u;
+  if (stop) { stop(); stop = null; }
+  if (u) stop = onSnapshot(query(collection(db, "wishes"), orderBy("createdAt", "desc")), render,
+    () => $("#count").textContent = "This account can't read wishes. Check the admin UID in your Firestore rules.");
+});
+$("#in").onclick = () => signInWithEmailAndPassword(auth, $("#email").value.trim(), $("#pw").value)
+  .catch(() => $("#err").textContent = "Sign-in failed. Check your email and password.");
+$("#out").onclick = () => signOut(auth);
+</script>
+</body>
+</html>

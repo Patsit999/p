@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0d2e">
+<title>Loy Krathong · Let's float together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=Mali&family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="app">
+<div id="sky"></div><div class="moon"></div><div class="river"></div>
+
+<section class="screen on" id="welcome"><div class="box">
+  <h1>Happy Loy Krathong,<br>my love</h1>
+  <p class="sub">The moon is full and the river is glowing. Write a wish, release it onto the water, and let it drift all the way to me.</p>
+  <button class="btn" id="start">Let's Float Together</button>
+</div></section>
+
+<section class="screen" id="make"><div class="box glass">
+  <h2>Make your krathong</h2>
+  <div id="preview"></div>
+  <label>Flowers</label><div class="chips" id="flowers"></div>
+  <label>Candles</label><div class="chips" id="candles"></div>
+  <label for="name">Your name or nickname</label>
+  <input id="name" maxlength="40" placeholder="e.g. Your moonlight" autocomplete="nickname">
+  <label for="wish">Your wish</label>
+  <textarea id="wish" rows="4" maxlength="600" placeholder="Write what your heart wishes tonight…"></textarea>
+  <button class="btn" id="release">Release My Krathong</button>
+</div></section>
+
+<section class="screen" id="river">
+  <div class="top"><h2>Your wish is drifting to the moon</h2></div>
+  <div class="boat" id="boat" role="button" tabindex="0" aria-label="Read your wish">
+    <div class="bob"><div id="k1"></div><div class="refl" id="k2"></div></div>
+  </div>
+  <div class="bar"><p class="hint">Tap your krathong to read your wish ✨</p><button class="btn ghost" id="again">Float another krathong</button></div>
+</section>
+
+<div class="modal" id="modal"><div class="glass">
+  <p class="from">A wish from</p><h2 id="mName"></h2><p class="wish" id="mWish"></p>
+  <button class="btn" id="close">Close</button>
+</div></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import { db, configured, krathongSVG, FLOWERS, sky } from "./shared.js";
+import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const $ = s => document.querySelector(s);
+let flower = "lotus", candles = 2, timer;
+sky();
+
+const go = id => document.querySelectorAll(".screen").forEach(e => e.classList.toggle("on", e.id === id));
+const toast = m => { const t = $("#toast"); t.textContent = m; t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 3800); };
+const draw = () => $("#preview").innerHTML = krathongSVG(flower, candles);
+
+$("#flowers").innerHTML = Object.entries(FLOWERS).map(([k, v]) =>
+  `<button type="button" class="chip${k === flower ? " on" : ""}" data-f="${k}"><i style="background:${v.petal}"></i>${v.name}</button>`).join("");
+$("#candles").innerHTML = [1, 2, 3].map(n =>
+  `<button type="button" class="chip${n === candles ? " on" : ""}" data-c="${n}">${n} candle${n > 1 ? "s" : ""}</button>`).join("");
+document.addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  b.parentElement.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b));
+  if (b.dataset.f) flower = b.dataset.f; else candles = +b.dataset.c;
+  draw();
+});
+draw();
+$("#start").onclick = () => go("make");
+
+const boat = $("#boat"), modal = $("#modal");
+function launch(name, wish) {
+  $("#k1").innerHTML = $("#k2").innerHTML = krathongSVG(flower, candles);
+  $("#mName").textContent = name; $("#mWish").textContent = wish;
+  boat.classList.remove("go"); void boat.offsetWidth; boat.classList.add("go");
+  go("river");
+  clearInterval(timer);
+  timer = setInterval(() => {            // sparkles rising from the candlelight
+    const r = boat.getBoundingClientRect(), s = document.createElement("i");
+    s.className = "sparkle";
+    s.style.cssText = `left:${r.left + r.width * (.15 + Math.random() * .7)}px;top:${r.top + r.height * (.05 + Math.random() * .3)}px;--x:${Math.random() * 60 - 30}px`;
+    document.body.append(s); setTimeout(() => s.remove(), 2300);
+  }, 280);
+}
+
+$("#release").onclick = async () => {
+  const name = $("#name").value.trim() || "My love", wish = $("#wish").value.trim(), btn = $("#release");
+  if (!wish) return toast("Write a little wish first 💌");
+  btn.disabled = true; btn.textContent = "Releasing…";
+  try {
+    if (!configured) throw new Error("not configured");
+    await Promise.race([
+      addDoc(collection(db, "wishes"), { name, wish, flower, candles, createdAt: serverTimestamp() }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10000))
+    ]);
+    launch(name, wish);
+  } catch (err) {
+    console.error(err);
+    toast(configured ? "Your wish didn't send. Check your connection and try again." : "Firebase isn't set up yet. See README.md.");
+  }
+  btn.disabled = false; btn.textContent = "Release My Krathong";
+};
+
+boat.onclick = () => modal.classList.add("on");
+boat.onkeydown = e => e.key === "Enter" && boat.click();
+$("#close").onclick = () => modal.classList.remove("on");
+modal.onclick = e => { if (e.target === modal) modal.classList.remove("on"); };
+$("#again").onclick = () => { clearInterval(timer); $("#wish").value = ""; go("make"); };
+</script>
+</body>
+</html>
